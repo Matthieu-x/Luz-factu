@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10121a">
+  <title>FacturaIA</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">F</span><span>FacturaIA</span></div>
+    <nav>
+      <button class="nav active" data-view="dashboard">▦ <span>Resumen</span></button>
+      <button class="nav" data-view="process">＋ <span>Procesar ticket</span></button>
+      <button class="nav" data-view="clients">♙ <span>Clientes fiscales</span></button>
+      <button class="nav" data-view="history">◷ <span>Historial</span></button>
+    </nav>
+    <div class="sidebar-foot">Procesamiento inteligente<br><small>Versión de prueba</small></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div><p class="eyebrow">GESTIÓN DE FACTURACIÓN</p><h1 id="page-title">Resumen</h1></div><span class="status"><i></i> Sistema de prueba</span></header>
+    <section id="dashboard" class="view active">
+      <div class="welcome"><div><p class="eyebrow">PANEL PRINCIPAL</p><h2>Todo bajo control.</h2><p>Convierte tickets en información organizada y lista para revisar.</p></div><button class="primary" data-go="process">＋ Procesar ticket</button></div>
+      <div class="stats"><article class="stat"><span>Tickets procesados</span><strong id="stat-tickets">0</strong><small>En este dispositivo</small></article><article class="stat"><span>Clientes registrados</span><strong id="stat-clients">0</strong><small>Datos fiscales guardados</small></article><article class="stat"><span>Total registrado</span><strong id="stat-total">$0.00</strong><small>Moneda según el ticket</small></article></div>
+      <div class="panel"><div class="panel-head"><div><h3>Actividad reciente</h3><p>Los últimos tickets procesados</p></div><button class="quiet" data-go="history">Ver historial →</button></div><div id="recent-list" class="empty">Todavía no hay tickets procesados.</div></div>
+    </section>
+    <section id="process" class="view">
+      <div class="panel upload-panel"><div class="panel-head"><div><h3>Nuevo ticket</h3><p>Sube una fotografía clara del comprobante.</p></div><span class="step">01 / 02</span></div>
+        <label class="dropzone" for="ticket-file"><span class="upload-icon">↑</span><strong>Selecciona una fotografía</strong><span>JPG, PNG o WEBP · La imagen se procesa en tu navegador y no se almacena.</span><input id="ticket-file" type="file" accept="image/*"></label>
+        <div class="actions"><button id="ocr-button" class="primary" disabled>Leer ticket</button><span id="ocr-status" class="muted">Esperando una imagen…</span></div>
+      </div>
+      <div id="result-panel" class="panel hidden"><div class="panel-head"><div><h3>Revisa los datos extraídos</h3><p>La IA organiza el texto reconocido. Verifica los importes antes de exportar.</p></div></div>
+        <div class="form-grid">
+          <label>Emisor / comercio<input id="merchant" placeholder="Nombre del comercio"></label>
+          <label>Identificación fiscal<input id="tax-id" placeholder="RTN / RFC / NIF"></label>
+          <label>Fecha<input id="date" type="date"></label>
+          <label>Moneda<input id="currency" value="HNL"></label>
+          <label>Subtotal<input id="subtotal" type="number" step="0.01" value="0"></label>
+          <label>Impuestos / IVA<input id="tax" type="number" step="0.01" value="0"></label>
+          <label>Total<input id="total" type="number" step="0.01" value="0"></label>
+          <label>Cliente<input id="client-name" placeholder="Nombre del cliente"></label>
+        </div>
+        <label class="full-label">Texto detectado<textarea id="raw-text" rows="5" placeholder="El texto OCR aparecerá aquí…"></textarea></label>
+        <div id="validation" class="validation hidden"></div>
+        <div class="actions"><button id="save-ticket" class="primary">Guardar ticket</button><button id="export-one" class="secondary">Exportar este ticket</button></div>
+      </div>
+    </section>
+    <section id="clients" class="view"><div class="panel"><div class="panel-head"><div><h3>Clientes fiscales</h3><p>Guarda datos para tenerlos disponibles en este dispositivo.</p></div></div>
+      <div class="form-grid"><label>Nombre / razón social<input id="new-client-name" placeholder="Nombre del cliente"></label><label>Identificación fiscal<input id="new-client-tax" placeholder="RTN / RFC / NIF"></label><label>Correo<input id="new-client-email" type="email" placeholder="correo@ejemplo.com"></label><label>Dirección<input id="new-client-address" placeholder="Dirección fiscal"></label></div><div class="actions"><button id="add-client" class="primary">Guardar cliente</button></div><div id="client-list" class="table-wrap empty">No hay clientes registrados.</div>
+    </div></section>
+    <section id="history" class="view"><div class="panel"><div class="panel-head"><div><h3>Historial de tickets</h3><p>Registros guardados localmente.</p></div><button id="export-all" class="primary">Exportar Excel</button></div><div id="history-list" class="table-wrap empty">No hay registros todavía.</div></div></section>
+    <footer>FacturaIA · Herramienta de organización y revisión. No emite comprobantes fiscales oficiales.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
