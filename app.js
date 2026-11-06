@@ -16,7 +16,56 @@ function tableTickets(rows){return `<table><thead><tr><th>Fecha</th><th>Comercio
 $('ticket-file').addEventListener('change',e=>{selectedFile=e.target.files[0]||null;$('ocr-button').disabled=!selectedFile;$('ocr-status').textContent=selectedFile?selectedFile.name:'Esperando una imagen…';$('result-panel').classList.add('hidden')});
 function shrinkImage(file,max=2200){return new Promise((resolve,reject)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);canvas.toBlob(b=>b?resolve(b):reject(Error('No se pudo preparar la imagen')),'image/jpeg',.86)};img.onerror=()=>reject(Error('No se pudo abrir la imagen'));img.src=url})}
 $('ocr-button').addEventListener('click',async()=>{if(!selectedFile)return;const btn=$('ocr-button');btn.disabled=true;$('ocr-status').textContent='Leyendo fotografía…';try{const image=await shrinkImage(selectedFile);const result=await Tesseract.recognize(image,'spa+eng',{logger:m=>{if(m.status==='recognizing text')$('ocr-status').textContent=`Reconociendo texto: ${Math.round(m.progress*100)}%`}});$('raw-text').value=result.data.text||'';$('result-panel').classList.remove('hidden');$('ocr-status').textContent='Lectura completada. Revisá los datos.';navigate('process');await parseWithAI(result.data.text)}catch(e){$('ocr-status').textContent='Error OCR: '+e.message}finally{btn.disabled=false}});
-async function parseWithAI(text){if(!text.trim())return;$('ocr-status').textContent='Organizando datos con IA…';try{const r=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});const body=await r.json();if(!r.ok)throw Error(body.error||'La IA no pudo procesar el ticket');const d=body.data||{};setIf('merchant',d.merchant);setIf('tax-id',d.tax_id);setIf('date',d.date);setIf('currency',d.currency);setIf('subtotal',d.subtotal);setIf('tax',d.tax);setIf('total',d.total);$('ocr-status').textContent='Datos organizados. Revisá antes de guardar.';validate()}catch(e){$('ocr-status').textContent='OCR listo; IA no disponible: '+e.message+' Podés completar los campos manualmente.'}}
+function amountFromText(value){
+  let s=String(value||'').replace(/^L\.?\s*/i,'').replace(/[^\d,.-]/g,'').trim();
+  if(!s)return 0;
+  if(s.includes(',')&&s.includes('.'))s=s.replace(/,/g,'');
+  else if(s.includes(','))s=s.replace(',','.');
+  const n=Number(s);return Number.isFinite(n)?n:0;
+}
+function findLabeledAmount(lines,labels,excluded=[]){
+  const labelRe=new RegExp(labels,'i');
+  const amountRe=/(?:L\.?\s*)?\d{1,3}(?:[,.]\d{3})*(?:[,.]\d{2})|(?:L\.?\s*)?\d+(?:[,.]\d{2})/g;
+  for(let i=0;i<lines.length;i++){
+    if(!labelRe.test(lines[i])||excluded.some(re=>re.test(lines[i])))continue;
+    const found=[];
+    for(let j=0;j<=2&&i+j<lines.length;j++){
+      if(j>0&&/sub\s*total|subtotal|impuestos?|\biva\b|\bisv\b|\btax\b|\btotal\b/i.test(lines[i+j]))break;
+      for(const m of lines[i+j].matchAll(amountRe)){const n=amountFromText(m[0]);if(n>0)found.push(n)}
+    }
+    if(found.length)return found[found.length-1];
+  }
+  return 0;
+}
+function parseReceiptLocally(text){
+  const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  return {
+    subtotal:findLabeledAmount(lines,'sub\\s*total|subtotal|sub-total'),
+    tax:findLabeledAmount(lines,'impuestos?|\\biva\\b|\\bisv\\b|\\btax\\b'),
+    total:findLabeledAmount(lines,'total(?:\\s+a\\s+pagar)?|monto\\s+total',[/sub\\s*total/i,/subtotal/i,/impuestos?/i,/\biva\b/i,/\bisv\b/i,/\btax\b/i])
+  };
+}
+async function parseWithAI(text){
+  if(!text.trim())return;
+  $('ocr-status').textContent='Organizando datos con IA…';
+  const local=parseReceiptLocally(text);
+  try{
+    const r=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    const body=await r.json();
+    if(!r.ok)throw Error(body.error||'No se pudo procesar el ticket');
+    const d=body.data||{};
+    setIf('merchant',d.merchant);setIf('tax-id',d.tax_id);setIf('date',d.date);setIf('currency',d.currency);
+    $('subtotal').value=Number(d.subtotal)>0?d.subtotal:local.subtotal;
+    $('tax').value=Number(d.tax)>0?d.tax:local.tax;
+    $('total').value=Number(d.total)>0?d.total:local.total;
+    $('ocr-status').textContent=body.warning||'Datos organizados. Revisá los importes antes de guardar.';
+    validate();
+  }catch(e){
+    $('subtotal').value=local.subtotal||0;$('tax').value=local.tax||0;$('total').value=local.total||0;
+    $('ocr-status').textContent='IA no disponible; se intentó recuperar los importes directamente del OCR. Revisá los datos.';
+    validate();
+  }
+}
 function setIf(id,v){if(v!==undefined&&v!==null&&v!=='')$(id).value=v}
 function readForm(){return {merchant:$('merchant').value.trim(),taxId:$('tax-id').value.trim(),date:$('date').value,currency:$('currency').value.trim()||'HNL',subtotal:Number($('subtotal').value)||0,tax:Number($('tax').value)||0,total:Number($('total').value)||0,client:$('client-name').value.trim(),rawText:$('raw-text').value,createdAt:new Date().toISOString()}}
 function validate(){const t=readForm(),warnings=[];if(!t.merchant)warnings.push('Falta el nombre del comercio.');if(t.total<=0)warnings.push('El total debe ser mayor que cero.');if(t.subtotal<0||t.tax<0)warnings.push('Subtotal e impuestos no pueden ser negativos.');if(Math.abs((t.subtotal+t.tax)-t.total)>Math.max(1,t.total*.02))warnings.push('Subtotal + impuestos no coincide con el total (tolerancia 2%).');if(!t.date)warnings.push('No se detectó fecha.');$('validation').classList.remove('hidden','good');$('validation').classList.toggle('good',!warnings.length);$('validation').innerHTML=warnings.length?'<b>Revisá estos puntos:</b><br>'+warnings.map(escapeHtml).join('<br>'):'✓ Validación básica superada. Confirmá que los datos coincidan con el comprobante.';return warnings}
